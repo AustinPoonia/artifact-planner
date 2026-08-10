@@ -1,0 +1,40 @@
+{
+  "name": "artifact-planner",
+  "version": "0.1.0",
+  "description": "Which instances a network runs, what each may reach, and whether the whole graph is valid — derived and judged from signed documents alone",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "s=0; for f in test/chain.test.js test/plan.test.js; do bare \"$f\" || s=1; done; exit $s",
+    "typecheck": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AustinPoonia/artifact-planner.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AustinPoonia/artifact-planner/issues"
+  },
+  "homepage": "https://github.com/AustinPoonia/artifact-planner#readme",
+  "exports": {
+    ".": "./index.js",
+    "./chain": "./lib/chain.js",
+    "./plan": "./lib/plan.js",
+    "./package": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "vendor.d.ts"
+  ],
+  "dependencies": {
+    "artifact-protocol": "file:../artifact-protocol"
+  },
+  "devDependencies": {
+    "bare-assert": "^1.2.0",
+    "bare-runtime": "^1.30.3",
+    "bare-tap": "^1.0.0",
+    "typescript": "^5.5.0"
+  }
+}
