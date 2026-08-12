@@ -29,10 +29,13 @@
  * subject is the kernel or the shipped artifact set belongs to the kernel.**
  *
  *   - three of them drive `boot.mintNatives` — the agreement between the
- *     `NATIVE` table here, the switch the kernel dispatches on, and
- *     `capability.PLATFORM_CONTRACTS`. Two of the three scrape the live kernel
- *     function with `Function.prototype.toString`, so they are about a file this
- *     repo must not require and cannot see.
+ *     `NATIVE` table here, the switch the kernel dispatches on, and the composed
+ *     capability table in `ArtifactPatform/lib/capabilities.js`. Two of the three
+ *     scrape the live kernel function with `Function.prototype.toString`, so they are
+ *     about a file this repo must not require and cannot see. The third list used to
+ *     be `capability.PLATFORM_CONTRACTS`; ROADMAP §6a is emptying that one, and the
+ *     kernel's suite reads the composed set instead — which is also why the case
+ *     below walks `NATIVE` rather than that export.
  *   - one validates the real manifests of seven shipped artifacts. Moving it
  *     would have put eight `file:../` links to artifact repos in this package's
  *     manifest, making a pure documents-in library depend on the concrete
@@ -963,10 +966,32 @@ test('a valid adapter graph is still clean once the declaration resolves', () =>
 
 test('the platform namespace is deliberately not seeded, and the parser is why', () => {
   // The obvious reading of the three cases above is that `visible()` has a second
-  // hole exactly like the one they close: `lib/capability.js` now declares six
-  // `platform:*` contracts and `visible()` seeds none of them, which is the same
-  // sentence that described the `kernel:` bug. It is not the same bug, and the
-  // difference is worth pinning rather than re-fixing.
+  // hole exactly like the one they close: there are six `platform:*` contracts and
+  // `visible()` seeds none of them, which is the same sentence that described the
+  // `kernel:` bug. It is not the same bug, and the difference is worth pinning
+  // rather than re-fixing.
+  //
+  // ## The list this walks is `NATIVE`, and it used to be
+  // ## `capability.PLATFORM_CONTRACTS`
+  //
+  // That was not a wording problem, it was this case quietly emptying. ROADMAP §6a is
+  // moving each `platform:*` declaration into its own repository, so
+  // `artifact-protocol`'s table shrinks by one per sub-wave and is on its way to zero —
+  // and a `for` over an empty array asserts nothing while looking maintained. §6a
+  // named this file as the one place that happens and gave two ways out: make the
+  // composed set reachable from here, or assert what this repo can actually know.
+  //
+  // The first is unavailable and its unavailability is the point.
+  // `ArtifactPatform/lib/capabilities.js` is the only thing that sees all six, it is
+  // the kernel's, and this module sits underneath the kernel — reaching up for it
+  // would be the inversion the split exists to remove.
+  //
+  // So it is the second, and `NATIVE` is the better list on its own merits rather than
+  // as a consolation. It is *this repo's own table*, it is what decides which contracts
+  // a graph may name at all, it has all six rows permanently, and it cannot empty
+  // without this module changing — which is exactly the property
+  // `capability.PLATFORM_CONTRACTS` lost. The claim is unchanged: whatever `NATIVE`
+  // names is not seeded into `declared`.
   //
   // `declared` is read in exactly three places, and every one of them keys on an
   // id that `manifest.parse` refuses to let be `platform:` —
@@ -985,7 +1010,15 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
   const seen = chain.visible(set).get('solo')
   assert.ok(seen !== undefined, 'the artifact is not in the visibility map at all')
   assert.ok(seen.has('kernel:surface-adapter'), 'the kernel declaration is no longer seeded')
-  for (const id of capability.PLATFORM_CONTRACTS) {
+
+  const platform = Object.keys(chain.NATIVE)
+  // Non-vacuity, stated rather than assumed, because a loop over an empty list is
+  // precisely what this case was rewritten to stop being. Six is the number
+  // `ArtifactPatform/test/chain.test.js` holds `NATIVE` to against the composed
+  // capability table; here it only has to be more than none.
+  assert.ok(platform.length > 0, 'NATIVE names no platform contracts, so the loop below proves nothing')
+  for (const id of platform) {
+    assert.ok(capability.isPlatformContract(id), `NATIVE names ${id}, which is not a platform contract`)
     assert.equal(seen.has(id), false, `${id} is seeded but nothing can read it — see this case`)
   }
 
