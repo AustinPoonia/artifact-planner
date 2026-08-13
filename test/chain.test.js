@@ -982,7 +982,7 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
   // composed set reachable from here, or assert what this repo can actually know.
   //
   // The first is unavailable and its unavailability is the point.
-  // `ArtifactPatform/lib/capabilities.js` is the only thing that sees all six, it is
+  // `ArtifactPatform/lib/capabilities.js` is the only thing that sees them all, it is
   // the kernel's, and this module sits underneath the kernel — reaching up for it
   // would be the inversion the split exists to remove.
   //
