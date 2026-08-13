@@ -966,7 +966,7 @@ test('a valid adapter graph is still clean once the declaration resolves', () =>
 
 test('the platform namespace is deliberately not seeded, and the parser is why', () => {
   // The obvious reading of the three cases above is that `visible()` has a second
-  // hole exactly like the one they close: there are six `platform:*` contracts and
+  // hole exactly like the one they close: there are seven `platform:*` contracts and
   // `visible()` seeds none of them, which is the same sentence that described the
   // `kernel:` bug. It is not the same bug, and the difference is worth pinning
   // rather than re-fixing.
@@ -988,10 +988,16 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
   //
   // So it is the second, and `NATIVE` is the better list on its own merits rather than
   // as a consolation. It is *this repo's own table*, it is what decides which contracts
-  // a graph may name at all, it has all six rows permanently, and it cannot empty
+  // a graph may name at all, every row it has is permanent, and it cannot empty
   // without this module changing — which is exactly the property
   // `capability.PLATFORM_CONTRACTS` lost. The claim is unchanged: whatever `NATIVE`
   // names is not seeded into `declared`.
+  //
+  // It said "all six rows permanently" and now has seven, which is the reason this
+  // sentence no longer names a number. ROADMAP §6b's `platform:diagnostics` is the
+  // first row added rather than moved, so the table's size is not a property of a
+  // finished phase — and a count written into a comment beside a loop that derives
+  // its own is exactly the drift `--check-ledger` exists for one document over.
   //
   // `declared` is read in exactly three places, and every one of them keys on an
   // id that `manifest.parse` refuses to let be `platform:` —
@@ -1013,9 +1019,10 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
 
   const platform = Object.keys(chain.NATIVE)
   // Non-vacuity, stated rather than assumed, because a loop over an empty list is
-  // precisely what this case was rewritten to stop being. Six is the number
+  // precisely what this case was rewritten to stop being. The exact count is what
   // `ArtifactPatform/test/chain.test.js` holds `NATIVE` to against the composed
-  // capability table; here it only has to be more than none.
+  // capability table; here it only has to be more than none, which is the half this
+  // repo can answer without reaching up into the kernel for the other two lists.
   assert.ok(platform.length > 0, 'NATIVE names no platform contracts, so the loop below proves nothing')
   for (const id of platform) {
     assert.ok(capability.isPlatformContract(id), `NATIVE names ${id}, which is not a platform contract`)
