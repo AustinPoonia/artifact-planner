@@ -33,9 +33,9 @@
  *     capability table in `ArtifactPatform/lib/capabilities.js`. Two of the three
  *     scrape the live kernel function with `Function.prototype.toString`, so they are
  *     about a file this repo must not require and cannot see. The third list used to
- *     be `capability.PLATFORM_CONTRACTS`; ROADMAP §6a is emptying that one, and the
- *     kernel's suite reads the composed set instead — which is also why the case
- *     below walks `NATIVE` rather than that export.
+ *     be `capability.PLATFORM_CONTRACTS`, which the capability split emptied and then
+ *     removed outright; the kernel's suite reads the composed set instead — which is
+ *     also why the case below walks `NATIVE` rather than that export.
  *   - one validates the real manifests of seven shipped artifacts. Moving it
  *     would have put eight `file:../` links to artifact repos in this package's
  *     manifest, making a pure documents-in library depend on the concrete
@@ -974,12 +974,12 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
   // ## The list this walks is `NATIVE`, and it used to be
   // ## `capability.PLATFORM_CONTRACTS`
   //
-  // That was not a wording problem, it was this case quietly emptying. ROADMAP §6a is
-  // moving each `platform:*` declaration into its own repository, so
-  // `artifact-protocol`'s table shrinks by one per sub-wave and is on its way to zero —
-  // and a `for` over an empty array asserts nothing while looking maintained. §6a
-  // named this file as the one place that happens and gave two ways out: make the
-  // composed set reachable from here, or assert what this repo can actually know.
+  // That was not a wording problem, it was this case quietly emptying. The capability
+  // split moved each `platform:*` declaration into its own repository, so
+  // `artifact-protocol`'s table shrank by one per wave, reached zero, and the export was
+  // then removed — and a `for` over an empty array asserts nothing while looking
+  // maintained. The split named this file as the one place that happens and gave two ways
+  // out: make the composed set reachable from here, or assert what this repo can know.
   //
   // The first is unavailable and its unavailability is the point.
   // `ArtifactPatform/lib/capabilities.js` is the only thing that sees them all, it is
@@ -994,7 +994,7 @@ test('the platform namespace is deliberately not seeded, and the parser is why',
   // names is not seeded into `declared`.
   //
   // It said "all six rows permanently" and now has seven, which is the reason this
-  // sentence no longer names a number. ROADMAP §6b's `platform:diagnostics` is the
+  // sentence no longer names a number. `platform:diagnostics` is the
   // first row added rather than moved, so the table's size is not a property of a
   // finished phase — and a count written into a comment beside a loop that derives
   // its own is exactly the drift `--check-ledger` exists for one document over.

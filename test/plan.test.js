@@ -447,7 +447,7 @@ test('a permission instance is itself wired from the view', () => {
 })
 
 test('without the groups artifact a permission resolves from users alone', () => {
-  // Phase 4's result, now reached by derivation: the same artifact, one binding
+  // An earlier hand-wired result, now reached by derivation: the same artifact, one binding
   // apart, deciding differently — and no way for the narrower one to learn that
   // groups exist.
   const specs = plan({ permissions, send: gated }, {
