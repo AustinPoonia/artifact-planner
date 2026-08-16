@@ -66,6 +66,12 @@ It reads declarations, so it inherits every limit declarations have.
 - **Not the plan, when `chain` is the one asked.** A graph `plan` refused to
   derive never reaches the validator, and those ambiguity errors are the planner's
   alone.
+- **Not which versions the runtime it will land on actually publishes.** The
+  `platform:*` range check is only as current as the table it is handed, and the
+  default table is compiled in here rather than read from the capability
+  repositories. A build whose capabilities have moved on is a build this can
+  refuse a legitimate range on; pass `validate` the composed set to remove the
+  gap entirely.
 
 A clean verdict means the graph is wired the way its documents say. It does not
 mean the code behind those documents works.
@@ -79,6 +85,27 @@ derivation a device runs at boot cannot answer differently. The failure this
 codebase keeps removing is two copies of one rule drifting apart, and two
 repositories is the most reliable way there is to produce them. Splitting these
 would have recreated it on purpose.
+
+`platformCheck` is exported across the repository boundary for the same reason.
+A `platform:*` port names a range, and until it existed nothing in the tree asked
+whether that range could be met — this module checked the contract was one the
+runtime provides and stopped, and the kernel's `assemble.js` answered a range no
+declaration satisfied with `null`, the value it also uses for "there was nothing
+worth checking here". So the two ways a wire can be unverifiable had one
+spelling, and the unsafe one was the quiet one. The rule now returns a tagged
+answer with **no value meaning unchecked**: either the versions a caller may use,
+or `PLATFORM_UNDECLARED` (the runtime mints this capability and publishes no
+version of it) or `PLATFORM_VERSION_OUT_OF_RANGE` (it publishes, and the port
+asked for versions that do not exist), each naming what was wanted beside what
+was offered. Those are different operator problems with different repairs, which
+is why they are two codes and not one.
+
+The versions themselves come from `PLATFORM_VERSIONS`, a table here rather than
+the composed set in the kernel's `lib/capabilities.js`, because this package
+cannot see the capability repositories without becoming the inversion the split
+removed. `validate` takes the table as an optional third argument so a caller
+that *can* see the composed set passes it; the constant's `ponytail:` states the
+cost of the copy and names that argument as its upgrade path.
 
 ## Why this is a repository at all
 
