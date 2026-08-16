@@ -1195,6 +1195,213 @@ test('a real platform port is not mistaken for a missing instance', () => {
   assert.equal(v.ok, true, chain.explain(v))
 })
 
+/* ─────────────── a platform port's range, which nothing used to ask ─────── */
+
+/**
+ * One instance whose kind declares one `platform:*` port, bound to its native.
+ *
+ * The binding is the token `plan.js` would have minted, so these cases differ
+ * from the two above in exactly one field — the range — and nothing else can
+ * account for a different verdict.
+ *
+ * @param {string} contract @param {string} range
+ * @returns {{ manifests: Record<string, any>, specs: import('../lib/chain').InstanceSpec[] }}
+ */
+function platformPort (contract, range) {
+  const token = `@${contract.slice('platform:'.length)}`
+  return {
+    manifests: parseAll([link('p', {
+      contracts: [{ id: 'P', version: '1.0.0' }],
+      kinds: [{
+        key: 'p',
+        version: '1.0.0',
+        provides: [{ id: 'P', version: '1.0.0' }],
+        ports: [{ name: 'cap', contract, range, cardinality: 'one' }]
+      }]
+    })]),
+    specs: [{ id: 'p', artifact: 'p', kind: 'p', bindings: { cap: token } }]
+  }
+}
+
+test('a platform port whose range nothing published satisfies is refused, and one in range is not', () => {
+  // The measurement this case was written from, run before the check existed:
+  // a kind declaring `platform:diagnostics ^9.0.0` and `platform:store
+  // >=3.0.0 <1.0.0` came back `ok: true` with an empty problem list, and
+  // `explain` printed "the chain is valid". The contract was one the runtime
+  // provides, so `portProblems` said nothing; `assemble.js`'s `targetChecks`
+  // then found no declaration in range and returned `null`, which it reads as
+  // *unchecked*. Every call across such a port was validated against nothing.
+  //
+  // Both halves are asserted here, and the passing half is not decoration. A
+  // range check that refused every platform port would satisfy the refusal half
+  // of this case and take the whole platform down, so the two ranges that must
+  // pass are the two `platform:diagnostics` actually publishes — including
+  // `^1.0.0`, which is alive on purpose precisely because retiring it under the
+  // old behaviour would have opened this hole rather than reported it.
+  for (const range of ['^1.0.0', '^2.0.0', '>=1.0.0']) {
+    const { manifests, specs } = platformPort('platform:diagnostics', range)
+    const v = chain.validate(manifests, specs)
+    assert.equal(v.ok, true, `${range} was refused: ${chain.explain(v)}`)
+  }
+
+  // A range no published version satisfies, and one that is empty on its own
+  // terms. Both are the same fault to an operator — nothing can answer this
+  // port — and both used to be silence.
+  for (const [contract, range, offered] of [
+    ['platform:diagnostics', '^9.0.0', '1.0.0, 2.0.0'],
+    ['platform:store', '>=3.0.0 <1.0.0', '1.0.0']
+  ]) {
+    const { manifests, specs } = platformPort(contract, range)
+    const v = chain.validate(manifests, specs)
+    assert.equal(v.ok, false, `${contract} ${range} was accepted`)
+    const found = of(v, 'PLATFORM_VERSION_OUT_OF_RANGE')
+    assert.equal(found.length, 1, chain.explain(v))
+    assert.equal(found[0].port, 'cap')
+    // Named on both sides. A refusal that says only "no" sends the reader to the
+    // capability's repository to find out what it could have asked for.
+    assert.ok(found[0].message.includes(`${contract} ${range}`),
+      `the refusal does not name what was wanted: ${found[0].message}`)
+    assert.ok(found[0].message.includes(offered),
+      `the refusal does not name what was offered: ${found[0].message}`)
+  }
+})
+
+test('a capability publishing nothing is refused as undeclared, not as out of range', () => {
+  // The two operator problems the header separates. A range nobody publishes is
+  // one line in one manifest; a capability the runtime mints and declares no
+  // version of is a platform build with a hole in it, and no edit to the
+  // consuming manifest touches it. One code for both would leave the reader
+  // guessing which of their two artefacts to open.
+  const { manifests, specs } = platformPort('platform:store', '^1.0.0')
+
+  const empty = chain.validate(manifests, specs, { 'platform:store': [] })
+  assert.equal(empty.ok, false, chain.explain(empty))
+  assert.equal(of(empty, 'PLATFORM_UNDECLARED').length, 1, chain.explain(empty))
+  assert.equal(of(empty, 'PLATFORM_VERSION_OUT_OF_RANGE').length, 0, chain.explain(empty))
+  assert.ok(/publishes no version of/.test(of(empty, 'PLATFORM_UNDECLARED')[0].message),
+    of(empty, 'PLATFORM_UNDECLARED')[0].message)
+
+  // The same graph, the same port, one published version: clean. So the code
+  // above is about the table and not about the port.
+  const stocked = chain.validate(manifests, specs, { 'platform:store': ['1.0.0'] })
+  assert.equal(stocked.ok, true, chain.explain(stocked))
+
+  // And the same port against a table that publishes something out of range is
+  // the *other* code, from the same inputs — which is what makes the two
+  // distinguishable rather than merely differently spelled.
+  const wrong = chain.validate(manifests, specs, { 'platform:store': ['2.0.0'] })
+  assert.equal(of(wrong, 'PLATFORM_VERSION_OUT_OF_RANGE').length, 1, chain.explain(wrong))
+  assert.equal(of(wrong, 'PLATFORM_UNDECLARED').length, 0, chain.explain(wrong))
+})
+
+test('a capability table that names nothing refuses every platform port rather than passing them', () => {
+  // The property the whole change exists for: **absence must not read as fine.**
+  // `artifact-protocol` removed `PLATFORM_CONTRACTS` rather than leave it
+  // answering `[]` for exactly this reason, and a caller handing this module an
+  // empty table is the same mistake one layer up. It reports every port, and
+  // `ok` is false — a caller cannot take the verdict for a clean one.
+  const raws = [link('p', {
+    contracts: [{ id: 'P', version: '1.0.0' }],
+    kinds: [{
+      key: 'p',
+      version: '1.0.0',
+      provides: [{ id: 'P', version: '1.0.0' }],
+      ports: [
+        { name: 'view', contract: 'platform:network-view', range: '^1.0.0', cardinality: 'one' },
+        { name: 'store', contract: 'platform:store', range: '^1.0.0', cardinality: 'one' }
+      ]
+    }]
+  })]
+  const manifests = parseAll(raws)
+  /** @type {import('../lib/chain').InstanceSpec[]} */
+  const specs = [{ id: 'p', artifact: 'p', kind: 'p', bindings: { view: '@network-view', store: '@store:p' } }]
+
+  const blind = chain.validate(manifests, specs, {})
+  assert.equal(blind.ok, false, chain.explain(blind))
+  assert.equal(of(blind, 'PLATFORM_UNDECLARED').length, 2, chain.explain(blind))
+
+  // The same graph on the table this build actually carries. Two ports, no
+  // problems — so the case above is measuring the table and not a checker that
+  // refuses platform ports on principle.
+  const seeing = chain.validate(manifests, specs)
+  assert.equal(seeing.ok, true, chain.explain(seeing))
+})
+
+test('platformCheck answers with the versions in range and has no answer meaning unchecked', () => {
+  // The shared rule, driven directly, because `assemble.js` calls it with a
+  // composed capability table this repo cannot see and the two have to agree.
+  // The property under test is the one `targetChecks`' `Checks | null` could not
+  // express: there is no return value that means *nothing was checked*.
+  const two = chain.platformCheck('platform:diagnostics', '>=1.0.0', ['1.0.0', '2.0.0'])
+  assert.equal(two.ok, true)
+  // Order preserved, not sorted and not reduced to one. `targetChecks` resolves
+  // a shape with `.find` over an ascending list, so `[0]` has to stay the lowest
+  // satisfying version — the weakest shape the port promised to work against.
+  assert.equal(two.ok === true && two.versions.join(','), '1.0.0,2.0.0')
+
+  const one = chain.platformCheck('platform:diagnostics', '^2.0.0', ['1.0.0', '2.0.0'])
+  assert.equal(one.ok === true && one.versions.join(','), '2.0.0')
+
+  const none = chain.platformCheck('platform:diagnostics', '^9.0.0', ['1.0.0', '2.0.0'])
+  assert.equal(none.ok, false)
+  assert.equal(none.ok === false && none.code, 'PLATFORM_VERSION_OUT_OF_RANGE')
+
+  const bare = chain.platformCheck('platform:store', '^1.0.0', [])
+  assert.equal(bare.ok, false)
+  assert.equal(bare.ok === false && bare.code, 'PLATFORM_UNDECLARED')
+
+  // A malformed range is reported, not thrown. This module promises its callers
+  // that nothing here throws, and `assemble.js` will call this from inside a
+  // graph walk where an exception costs every other wire's verdict.
+  const junk = chain.platformCheck('platform:store', 'not a range', ['1.0.0'])
+  assert.equal(junk.ok, false)
+  assert.equal(junk.ok === false && junk.code, 'PLATFORM_VERSION_OUT_OF_RANGE')
+})
+
+test('every capability the native table names publishes at least one version', () => {
+  // The local half of the drift guard on `PLATFORM_VERSIONS`. Its own header
+  // registers the ceiling — it is a copy of a fact owned by seven other
+  // repositories — and the *values* can only be checked where all the lists are
+  // visible, which is `ArtifactPatform/test/chain.test.js` and not here. The
+  // *keys* can be checked here, and this is the failure that would otherwise be
+  // silent: an eighth row in `NATIVE` with no versions beside it makes every
+  // port on that capability report `PLATFORM_UNDECLARED`, which reads as a
+  // broken platform build rather than as a table somebody forgot to extend.
+  const table = Object.keys(chain.NATIVE).sort()
+  const versions = Object.keys(chain.PLATFORM_VERSIONS).sort()
+  assert.ok(table.length > 0, 'NATIVE names nothing, so this case proves nothing')
+  assert.equal(versions.join(','), table.join(','),
+    `NATIVE names ${table.join(',')} and PLATFORM_VERSIONS names ${versions.join(',')}`)
+
+  for (const id of table) {
+    const published = chain.PLATFORM_VERSIONS[id]
+    assert.ok(published.length > 0, `${id} publishes nothing, so every port on it goes unchecked`)
+    // And each published version is one a caret range over itself admits, which
+    // is the cheapest statement that they are versions rather than strings.
+    for (const v of published) {
+      assert.equal(chain.platformCheck(id, `^${v}`, published).ok, true, `${id} publishes ${v}, which it cannot match`)
+    }
+  }
+})
+
+test('an unknown platform contract is one problem and not two', () => {
+  // `UNKNOWN_PLATFORM_PORT` and the range codes answer different questions, and
+  // a contract the runtime does not provide has no range worth discussing — so
+  // the range check is skipped rather than allowed to add a second sentence
+  // about the same fault in a second vocabulary.
+  const { manifests, specs } = platformPort('platform:telepathy', '^1.0.0')
+  const v = chain.validate(manifests, specs)
+  assert.equal(of(v, 'UNKNOWN_PLATFORM_PORT').length, 1, chain.explain(v))
+  assert.equal(of(v, 'PLATFORM_UNDECLARED').length, 0, chain.explain(v))
+  assert.equal(of(v, 'PLATFORM_VERSION_OUT_OF_RANGE').length, 0, chain.explain(v))
+  assert.equal(v.problems.length, 1, chain.explain(v))
+
+  // The pair: a contract the runtime does provide, at a range it publishes,
+  // reports nothing at all through the same branch.
+  const real = platformPort('platform:network-view', '^1.0.0')
+  assert.equal(chain.validate(real.manifests, real.specs).ok, true)
+})
+
 test('config is held to the schema its kind declared, before anything runs', () => {
   const raws = [link('cfg', {
     contracts: [{ id: 'G', version: '1.0.0' }],
