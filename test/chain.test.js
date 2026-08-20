@@ -1234,11 +1234,15 @@ test('a platform port whose range nothing published satisfies is refused, and on
   //
   // Both halves are asserted here, and the passing half is not decoration. A
   // range check that refused every platform port would satisfy the refusal half
-  // of this case and take the whole platform down, so the two ranges that must
-  // pass are the two `platform:diagnostics` actually publishes — including
+  // of this case and take the whole platform down, so the ranges that must pass
+  // are the three `platform:diagnostics` actually publishes — including
   // `^1.0.0`, which is alive on purpose precisely because retiring it under the
   // old behaviour would have opened this hole rather than reported it.
-  for (const range of ['^1.0.0', '^2.0.0', '>=1.0.0']) {
+  //
+  // `^3.0.0` is here because it was the false refusal: this list and the table
+  // it drives both said two while the capability published three, so a real kind
+  // asking for the current version was refused by name.
+  for (const range of ['^1.0.0', '^2.0.0', '^3.0.0', '>=1.0.0']) {
     const { manifests, specs } = platformPort('platform:diagnostics', range)
     const v = chain.validate(manifests, specs)
     assert.equal(v.ok, true, `${range} was refused: ${chain.explain(v)}`)
@@ -1248,7 +1252,7 @@ test('a platform port whose range nothing published satisfies is refused, and on
   // terms. Both are the same fault to an operator — nothing can answer this
   // port — and both used to be silence.
   for (const [contract, range, offered] of [
-    ['platform:diagnostics', '^9.0.0', '1.0.0, 2.0.0'],
+    ['platform:diagnostics', '^9.0.0', '1.0.0, 2.0.0, 3.0.0'],
     ['platform:store', '>=3.0.0 <1.0.0', '1.0.0']
   ]) {
     const { manifests, specs } = platformPort(contract, range)
@@ -1332,6 +1336,13 @@ test('platformCheck answers with the versions in range and has no answer meaning
   // composed capability table this repo cannot see and the two have to agree.
   // The property under test is the one `targetChecks`' `Checks | null` could not
   // express: there is no return value that means *nothing was checked*.
+  //
+  // The `offered` lists below are this case's **own fixtures** and deliberately
+  // not `PLATFORM_VERSIONS['platform:diagnostics']`: `platformCheck` takes the
+  // list as an argument precisely so it can be driven with one no build has, and
+  // a case that read the table would stop being able to pin the filter's output.
+  // So `['1.0.0', '2.0.0']` here is not a claim about what the capability
+  // publishes — the case at the end of this file is the only thing that makes one.
   const two = chain.platformCheck('platform:diagnostics', '>=1.0.0', ['1.0.0', '2.0.0'])
   assert.equal(two.ok, true)
   // Order preserved, not sorted and not reduced to one. `targetChecks` resolves
@@ -1359,12 +1370,14 @@ test('platformCheck answers with the versions in range and has no answer meaning
 })
 
 test('every capability the native table names publishes at least one version', () => {
-  // The local half of the drift guard on `PLATFORM_VERSIONS`. Its own header
+  // The *keys* half of the drift guard on `PLATFORM_VERSIONS`. Its own header
   // registers the ceiling — it is a copy of a fact owned by seven other
-  // repositories — and the *values* can only be checked where all the lists are
-  // visible, which is `ArtifactPatform/test/chain.test.js` and not here. The
-  // *keys* can be checked here, and this is the failure that would otherwise be
-  // silent: an eighth row in `NATIVE` with no versions beside it makes every
+  // repositories. This case used to claim the *values* could only be checked
+  // where all the lists are visible, meaning `ArtifactPatform/test/chain.test.js`
+  // and not here; that was wrong, and the last case in this file is the values
+  // half, reading each capability's own `declaration.js` off disk. The keys are
+  // still worth their own case, because this is the failure that would otherwise
+  // be silent: an eighth row in `NATIVE` with no versions beside it makes every
   // port on that capability report `PLATFORM_UNDECLARED`, which reads as a
   // broken platform build rather than as a table somebody forgot to extend.
   const table = Object.keys(chain.NATIVE).sort()
