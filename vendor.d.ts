@@ -1,20 +1,27 @@
 /**
- * Types for the two things this repo's own suites need and which ship none, or
+ * Types for the few things this repo's own suites need and which ship none, or
  * ship an incomplete set.
  *
  * Deliberately *not* referenced from any shipping file, for the reason
  * `artifact-secrets/vendor.d.ts` states: a consumer that type-checks these
- * sources through a `file:` link already declares these modules in its own
- * vendor file — `ArtifactPatform/vendor.d.ts` declares both, line for line with
- * what is below — and a second ambient `declare module` for one specifier is a
- * duplicate the consumer cannot edit its way out of. So this file covers this
- * repo's own program only, and both consumers needed no edit for the move.
+ * sources through a `file:` link already declares these names in its own vendor
+ * file — `ArtifactPatform/vendor.d.ts` declares every one of them, and
+ * `artifact-operator/vendor.d.ts` declares the globals — and a second ambient
+ * declaration for one name is a duplicate the consumer cannot edit its way out
+ * of. So this file covers this repo's own program only, and both consumers
+ * needed no edit for the move or for the globals added since. What keeps that
+ * true is that nothing a consumer compiles reaches this file: the modules are
+ * named only from `test/`, and a consumer's program follows `lib/`.
  *
  * Nothing here declares `artifact-protocol`: it ships its own `.d.ts` set and
  * `exports` names them under a `types` condition, so `lib/chain.js` and
- * `lib/plan.js` are checked against the real thing. That is the whole of the
- * vendor surface a pure documents-in/verdict-out library has, and it is worth
- * noticing — this repo requires nothing with a socket, a store or a key in it.
+ * `lib/plan.js` are checked against the real thing. Nor `bare-fs` or
+ * `bare-path`, which `test/chain.test.js` reaches for to read a sibling
+ * capability's `declaration.js` off disk: both ship an `index.d.ts` their own
+ * `exports` names, so that read is checked against the real thing too. The
+ * shipping files still require neither — this repo requires nothing with a
+ * socket, a store or a key in it, and nothing at all outside
+ * `artifact-protocol`.
  */
 
 /**
@@ -70,3 +77,24 @@ declare module 'bare-assert' {
   }
   export = assert
 }
+
+/**
+ * `console` is a Bare global (bare-console), and the ES2022 lib with `types: []`
+ * knows nothing about it. `log` only, and for exactly one caller: the loud skip
+ * in `test/chain.test.js`'s `PLATFORM_VERSIONS` drift guard, which has to say
+ * `# NOT MEASURED` on a checkout without the capability siblings beside it.
+ * `error` is not here because nothing needs it; `ArtifactPatform/vendor.d.ts`
+ * declares both, and this is the narrower half of that pair rather than a
+ * divergence from it.
+ */
+declare const console: {
+  log (...args: any[]): void
+}
+
+/**
+ * Bare's CommonJS module wrapper supplies this, the same way Node's does. One
+ * caller, in `test/`: the drift guard resolves `../platform-<segment>` relative
+ * to itself, and there is no `import.meta.url` in a CJS file to derive it from.
+ * `__filename` is not declared, for the reason `error` above is not.
+ */
+declare const __dirname: string

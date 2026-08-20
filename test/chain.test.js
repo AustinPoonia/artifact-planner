@@ -50,6 +50,8 @@
  */
 const t = require('bare-tap')
 const assert = require('bare-assert')
+const fs = require('bare-fs')
+const path = require('bare-path')
 
 const { manifest, capability } = require('artifact-protocol')
 const chain = require('../lib/chain')
@@ -1827,6 +1829,126 @@ test('a malformed range costs the port and not the whole verdict', () => {
   assert.equal(of(v, 'VERSION_OUT_OF_RANGE').length, 1, chain.explain(v))
   // And the rest of the graph was still checked.
   assert.equal(v.problems.every((p) => p.path.length > 0), true)
+})
+
+/* ────────── the values half of the PLATFORM_VERSIONS drift guard ─────────── */
+
+/**
+ * Every version one capability package publishes, derived from that package's own
+ * source rather than restated here.
+ *
+ * A check that hardcoded the same three strings `PLATFORM_VERSIONS` holds would go
+ * stale on exactly the day the table does and prove nothing, so nothing below
+ * names a version. It reads `../platform-<segment>/lib/declaration.js` and walks
+ * the same structure `ArtifactPatform/lib/capabilities.js` spreads at load:
+ *
+ *   1. the `const VERSION…= '<semver>'` literals, by name;
+ *   2. `const DECLARATIONS = Object.freeze([…])`, which is the published list *in
+ *      publication order* — the order `targetChecks` resolves a shape with `.find`
+ *      over, and therefore the order this table's row has to be in;
+ *   3. each named declaration's own `version:` field, back to its literal.
+ *
+ * Reading the file rather than requiring the package is the whole reason this can
+ * live here. A `file:../platform-diagnostics` link in this manifest is the
+ * inversion `index.js` and `PLATFORM_VERSIONS`' header both refuse — a pure
+ * documents-in library depending on the concrete capabilities it exists to judge.
+ * Text on disk is not a dependency: nothing resolves, nothing loads, and
+ * `--check-doors` still sees a package that requires `artifact-protocol` and
+ * nothing else.
+ *
+ * Two ceilings, both real. The siblings have to be **checked out beside this
+ * repo**, and in a lone-repo checkout the case below measures nothing and says so.
+ * And this parses source text, so a capability package that restructured
+ * `declaration.js` reads as unparseable rather than as a mismatch — which is why
+ * `null` is a loud skip naming the file and not a pass.
+ *
+ * @param {string} id   a `platform:*` capability id
+ * @returns {string[] | null}   the versions in publication order, or null if the
+ *   package is absent or its declaration file no longer has this shape
+ */
+function publishedVersions (id) {
+  const file = path.join(__dirname, '..', '..', `platform-${id.slice('platform:'.length)}`, 'lib', 'declaration.js')
+  if (!fs.existsSync(file)) return null
+  const src = fs.readFileSync(file, 'utf8')
+
+  /** @type {Map<string, string>} */
+  const literal = new Map()
+  for (const m of src.matchAll(/^const (VERSION[0-9A-Z_]*) = '([^']+)'$/gm)) literal.set(m[1], m[2])
+
+  const list = src.match(/^const DECLARATIONS = Object\.freeze\(\[([^\]]*)\]\)$/m)
+  if (list === null) return null
+
+  /** @type {string[]} */
+  const out = []
+  for (const name of list[1].split(',').map((s) => s.trim()).filter((s) => s.length > 0)) {
+    // The declaration object itself, so a `VERSION_x` constant that exists but is
+    // not in the published list cannot inflate the answer.
+    const decl = src.match(new RegExp(`^const ${name} = Object\\.freeze\\(\\{$([\\s\\S]*?)^\\}\\)$`, 'm'))
+    if (decl === null) return null
+    const field = decl[1].match(/^ {2}version: (VERSION[0-9A-Z_]*),$/m)
+    if (field === null) return null
+    const version = literal.get(field[1])
+    if (version === undefined) return null
+    out.push(version)
+  }
+  return out
+}
+
+test('PLATFORM_VERSIONS is what each capability package actually publishes, in its order', () => {
+  // The case the stale row needed and did not have. `platform:diagnostics` went
+  // to `3.0.0` in `platform-diagnostics/lib/declaration.js` and this table stayed
+  // at `['1.0.0', '2.0.0']`, so a kind declaring `platform:diagnostics ^3.0.0`
+  // came back `ok: false` with `PLATFORM_VERSION_OUT_OF_RANGE` — and
+  // `ArtifactPatform/lib/boot.js` throws on `!verdict.ok`, so a device whose
+  // runtime publishes `3.0.0` refused to boot a graph it could have run. Nothing
+  // in this repo could see that, which is the hole this closes.
+  //
+  // Every row in `NATIVE`, not just the one that drifted: the next stale row will
+  // be a different capability, and a case that only watched diagnostics would be
+  // the same omission with a newer date on it.
+  const rows = Object.keys(chain.NATIVE)
+  // Not decoration: an empty `NATIVE` would make the loop below vacuous and this
+  // case green without comparing anything, and green-because-nothing-ran is the
+  // one outcome a drift guard must not be able to reach quietly.
+  assert.ok(rows.length > 0, 'NATIVE names nothing, so this case compared nothing')
+
+  /** @type {string[]} */
+  const unread = []
+  let measured = 0
+
+  for (const id of rows) {
+    const published = publishedVersions(id)
+    if (published === null) {
+      unread.push(id)
+      continue
+    }
+    measured++
+    // Joined rather than compared element-wise so the failure message carries
+    // both whole lists — the reader's next move is to copy one over the other.
+    // Order included, because it is load-bearing: `targetChecks` takes the first
+    // satisfying entry, so a reversed row silently answers a `^1.0.0` port with
+    // the highest version in range instead of the lowest.
+    assert.strictEqual(
+      chain.PLATFORM_VERSIONS[id].join(', '),
+      published.join(', '),
+      `PLATFORM_VERSIONS says ${id} publishes ${chain.PLATFORM_VERSIONS[id].join(', ')} and ` +
+      `platform-${id.slice('platform:'.length)}/lib/declaration.js publishes ${published.join(', ')} — ` +
+      'a row short of the package refuses a range the device would accept, and a row ahead of it ' +
+      'promises a shape no declaration backs'
+    )
+  }
+
+  // The ceiling, said out loud and per row, because a lone-repo checkout is a
+  // legitimate way to run this suite and a silent zero there would be this case
+  // reporting `ok` for rows it never opened. `measured` is in the line so the
+  // reader can tell "one sibling missing" from "no siblings at all" without
+  // counting the ids.
+  if (unread.length > 0) {
+    console.log(`# NOT MEASURED [capability-source-unreadable]: ${unread.join(', ')} — ` +
+      `${measured} of ${rows.length} rows compared; the rest have no ` +
+      '../platform-<segment>/lib/declaration.js beside this repo, or one whose shape this case ' +
+      'cannot parse, and were compared against nothing')
+  }
 })
 
 /* ──────────────────────────────── run them ─────────────────────────────── */
