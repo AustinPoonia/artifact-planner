@@ -1,6 +1,6 @@
 {
   "name": "artifact-planner",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Which instances a network runs, what each may reach, and whether the whole graph is valid \u2014 derived and judged from signed documents alone",
   "license": "Apache-2.0",
   "type": "commonjs",
